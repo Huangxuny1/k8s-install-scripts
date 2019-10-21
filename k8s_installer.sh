@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e 
+
 # terminal color 
 red='\e[91m'
 green='\e[92m'
@@ -24,23 +26,14 @@ usage() {
 		with the master. Takes three arguments: 'master_ip', 'token' and a 'hash'."
 }
 
-# current user
-user="$(id -un 2>/dev/null || true)"
-_cyan "User ${user}"
 
-# indesl dependence
-sudo apt install -y \
-  apt-transport-https \
-  curl ca-certificates \
-  > /dev/null
-
-# install docker
+# install docker u
 install_docker(){
   # add gpg key
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
  
   # install docker use aliyun mirror 
-  curl -fsSL https://get.docker.com | bash -s docker –mirror Aliyun
+  curl -fsSL https://get.docker.com | bash -s docker --mirror Aliyun
   
   # add user to docker group 
   sudo usermod -aG docker ${user}
@@ -55,11 +48,12 @@ command_exists() {
 	command -v "$@" > /dev/null 2>&1
 }
 
+# u
 check_docker(){
   if command_exists docker && [ -e /var/run/docker.sock ]; then
-    return 0
+    echo 1
   fi 
-    return 1
+    echo 0
 }
 
 
@@ -115,7 +109,7 @@ done
 
 init_k8s_master_node(){
 #master node 
-kubeadm init --pod-network-cidr=10.244.0.0/16 # --kubernetes-version 1.16.0
+sudo kubeadm init --pod-network-cidr=10.244.0.0/16 # --kubernetes-version 1.16.0
 
 
 # To start using your cluster, you need to run the follong as a regular user:
@@ -128,8 +122,98 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
 
 apply_network(){
-
 # apply  flannel 
 kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
-
 }
+
+
+check(){
+  return `expr $?==0`
+}
+
+get_distribution() {
+	lsb_dist=""
+	# Every system that we officially support has /etc/os-release
+	if [ -r /etc/os-release ]; then
+		lsb_dist="$(. /etc/os-release && echo "$ID")"
+	fi
+	# Returning an empty string here should be alright since the
+	# case statements don't act unless you provide an actual value
+	echo "$lsb_dist"
+}
+
+
+# perform some very rudimentary platform detection
+#	lsb_dist=$( get_distribution )
+#	lsb_dist="$(echo "$lsb_dist" | tr '[:upper:]' '[:lower:]')"
+#
+#	case "$lsb_dist" in
+#
+#		ubuntu)
+#			if command_exists lsb_release; then
+#				dist_version="$(lsb_release --codename | cut -f2)"
+#			fi
+#			if [ -z "$dist_version" ] && [ -r /etc/lsb-release ]; then
+#				dist_version="$(. /etc/lsb-release && echo "$DISTRIB_CODENAME")"
+#			fi
+#		;;
+#
+#		debian)
+#			dist_version="$(sed 's/\/.*//' /etc/debian_version | sed 's/\..*//')"
+#			case "$dist_version" in
+#				10)
+#					dist_version="buster"
+#				;;
+#				9)
+#					dist_version="stretch"
+#				;;
+#				8)
+#					dist_version="jessie"
+#				;;
+#			esac
+#		;;
+#
+#		centos)
+#			if [ -z "$dist_version" ] && [ -r /etc/os-release ]; then
+#				dist_version="$(. /etc/os-release && echo "$VERSION_ID")"
+#			fi
+#		;;
+#
+#		*)
+#			if command_exists lsb_release; then
+#				dist_version="$(lsb_release --release | cut -f2)"
+#			fi
+#			if [ -z "$dist_version" ] && [ -r /etc/os-release ]; then
+#				dist_version="$(. /etc/os-release && echo "$VERSION_ID")"
+#			fi
+#		;;
+#
+#	esac
+
+
+
+do_install(){
+	if [[ $(check_docker) == 0 ]];then
+		_cyan "install docker ... "
+		install_docker
+	else
+		_green " "docker" already exist on this system "
+	fi
+  
+}
+
+
+# current user
+user="$(id -un 2>/dev/null || true)"
+_cyan "User ${user}"
+local_ip=`ip addr | grep 'state UP' -A2 | tail -n1 | awk '{print $2}' | awk -F"/" '{print $1}'`
+_cyan "Local IP6 is ${local_ip}"
+
+#  dependence
+sudo apt install -y \
+  apt-transport-https \
+  curl ca-certificates \
+  > /dev/null 2>&1
+
+do_install
+#kubectl get pods   -o $'jsonpath={range .items[*]}{.metadata.name}\t{.status.phase}\n{end}'  --all-namespaces
