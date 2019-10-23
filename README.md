@@ -1,12 +1,23 @@
-# k8s-install-scripts
 
+**kubernetes 自动安装脚本**
 
-一个使用 kubeadm 的 kubernetes 自动安装脚本
+- [x] 安装Docker (Aliyun镜像)
+- [x] 安装kubeadm kubelet kubectl
+- [x] 关闭swap
+- [x] 根据 `kubeadm config images list`从阿里云下载对应的镜像并打tag
+- [x] master init
+- [x] apply network
 
-目前只有ubuntu版本 而且不是很完善( 目前只是把安装过程 写在了脚本里 需要加入一些错误处理 和一些判断 )
+**TODO**
 
-将来会支持更多的系统和更加完善
+- [ ] 支持更多发行版
+- [ ] 更多的check
+- [ ] 根据配置 ssh 从节点自动加入(token ca-hash)
+- [ ] service状态判断(function check_service )
+- [ ] pods status  ( function check_pods_ready )
+- [ ] 更多网络方案  (Calico 等等)
+- [ ] 使用说明 (usage)
 
-欢迎提 issue 和 pr 
+<h2> 欢迎提 issue 和 PR 一起完善 </h2>
 
 

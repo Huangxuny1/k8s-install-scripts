@@ -33,13 +33,13 @@ install_docker(){
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
  
   # install docker use aliyun mirror 
-  curl -fsSL https://get.docker.com | bash -s docker --mirror Aliyun
+  curl -fsSL https://get.docker.com | bash -s docker --mirror Aliyun 
   
   # add user to docker group 
   sudo usermod -aG docker ${user}
   
   # refresh 
-  newgrp docker
+  #newgrp docker
 
 }
 
@@ -60,7 +60,7 @@ check_docker(){
 
 swap_off(){
 # swapoff permanently (reboot to take effect)
-sed -ri 's/.*swap.*/#&/' /etc/fstab
+sudo sed -ri 's/.*swap.*/#&/' /etc/fstab
 
 # swapoff immediately
 swap_stat=`swapon -s`
@@ -99,14 +99,14 @@ echo $k8s_images_list
 
 for imageName in ${k8s_images_list[@]} ; do
         echo ${imageName/#k8s\.gcr\.io\//}
-        docker pull registry.cn-hangzhou.aliyuncs.com/google_containers/${imageName/#k8s\.gcr\.io\//}
-        docker tag registry.cn-hangzhou.aliyuncs.com/google_containers/${imageName/#k8s\.gcr\.io\//} $imageName
-        docker rmi registry.cn-hangzhou.aliyuncs.com/google_containers/${imageName/#k8s\.gcr\.io\//}
+        sudo docker pull registry.cn-hangzhou.aliyuncs.com/google_containers/${imageName/#k8s\.gcr\.io\//}
+        sudo docker tag registry.cn-hangzhou.aliyuncs.com/google_containers/${imageName/#k8s\.gcr\.io\//} $imageName
+        sudo docker rmi registry.cn-hangzhou.aliyuncs.com/google_containers/${imageName/#k8s\.gcr\.io\//}
 done
 
 }
 
-
+# todo  choose k8s version
 init_k8s_master_node(){
 #master node 
 sudo kubeadm init --pod-network-cidr=10.244.0.0/16 # --kubernetes-version 1.16.0
@@ -120,7 +120,7 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 }
 
 
-
+#todo 
 apply_network(){
 # apply  flannel 
 kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
@@ -129,6 +129,25 @@ kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documen
 
 check(){
   return `expr $?==0`
+}
+
+check_pods_ready(){
+  kubectl get pods   -o $'jsonpath={range .items[*]}{.metadata.name}\t{.status.phase}\n{end}'  ${@:-'--all-namespaces'}
+}
+
+
+# service is active ?   1 active 2 activing 3 inactive 
+check_service(){
+  systemctl is-active  $@
+}
+
+get_ca_hash(){
+  openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex | sed 's/^.* //'
+}
+
+# only get default token 
+get_join_token(){
+  kubeadm token list |awk 'NR==2  {print $1}'
 }
 
 get_distribution() {
@@ -193,13 +212,26 @@ get_distribution() {
 
 
 do_install(){
+
 	if [[ $(check_docker) == 0 ]];then
 		_cyan "install docker ... "
 		install_docker
 	else
 		_green " "docker" already exist on this system "
 	fi
-  
+
+  swap_off
+  #todo  check    
+  install_k8s
+  get_k8s_required_images
+  init_k8s_master_node   # todo Get the join command for the slave node
+  apply_network
+ 
+  hash=`get_ca_hash`
+  token=`get_join_token`
+
+  echo -e "${green}  $hash ${none}"
+  echo -e "${green}  $token ${none}"
 }
 
 
