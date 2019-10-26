@@ -1,4 +1,12 @@
 
+```
+usage: 
+
+$ chmod u+x k8s_installer.sh
+$ ./k8s_installer.sh
+```
+
+
 **kubernetes 自动安装脚本**
 
 - [x] 安装Docker (Aliyun镜像)
@@ -20,4 +28,10 @@
 
 <h2> 欢迎提 issue 和 PR 一起完善 </h2>
 
-
+```
+ kubectl get pods   -o $'jsonpath={range .items[*]}{.metadata.name}\t{.status.containerStatuses[0].state}\n{end}'  ${@:-'--all-namespaces'}
+ docker pull registry.cn-hangzhou.aliyuncs.com/google_containers/kubernetes-dashboard-amd64:v1.10.1
+ function __is_pod_ready() {
+  [[ "$(kubectl get po "$1" -o 'jsonpath={.status.conditions[?(@.type=="Ready")].status}')" == 'True' ]]
+}
+```

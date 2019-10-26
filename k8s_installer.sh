@@ -20,7 +20,7 @@ _cyan() { echo -e ${cyan}$*${none}; }
 
 usage() {
   #todo
-  echo -e "Usage: k8s.sh [OPTIONS]
+  echo -e "Usage: k8s_installer.sh [OPTIONS]
 	master: install docker, kubectl, kubelet, kubeadm and creates the cluster
 	worker: also installs docker, kubectl, kubelet and kubeadm but executes the join
 		with the master. Takes three arguments: 'master_ip', 'token' and a 'hash'."
@@ -30,17 +30,13 @@ usage() {
 # install docker u
 install_docker(){
   # add gpg key
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
- 
+  #curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
   # install docker use aliyun mirror 
   curl -fsSL https://get.docker.com | bash -s docker --mirror Aliyun 
-  
   # add user to docker group 
   sudo usermod -aG docker ${user}
-  
   # refresh 
-  #newgrp docker
-
+  #newgrp docker  
 }
 
 # Check whether docker is installed successfully
@@ -48,7 +44,7 @@ command_exists() {
 	command -v "$@" > /dev/null 2>&1
 }
 
-# u
+## check docker whether installed   1 installed  0 no 
 check_docker(){
   if command_exists docker && [ -e /var/run/docker.sock ]; then
     echo 1
@@ -56,40 +52,22 @@ check_docker(){
     echo 0
 }
 
-
-
 swap_off(){
 # swapoff permanently (reboot to take effect)
 sudo sed -ri 's/.*swap.*/#&/' /etc/fstab
-
-# swapoff immediately
+# get swap status
 swap_stat=`swapon -s`
-
+# swapoff immediately
 if [ -z "$swap_stat" ]; then
-    _green "${green} swapoff ! ${none}"
+    echo -e  "${green}swapoff !${none}"
 else
-    echo -e "${yellow}  swap on ...  ${none} \n  $swap_stat  \n"
+    echo -e "${yellow}swap on ... closing${none} \n$swap_stat"
     sudo swapoff -a
     _green "swapoff ok . " 
 fi
 }
 
-install_k8s(){
-#  aliyun mirror k8s gpg  
-curl -fsSL https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | sudo apt-key add -
 
-# add aliyun mirror k8s source
-sudo tee /etc/apt/sources.list.d/kubernetes.list <<-'EOF'
-deb https://mirrors.aliyun.com/kubernetes/apt kubernetes-xenial main
-EOF
-
-#update
-sudo apt update
-
-# install kubelet kubeadm kubectl
-sudo apt install -y kubelet kubeadm kubectl
-
-}
 
 get_k8s_required_images(){
 # get images 
@@ -99,6 +77,10 @@ echo $k8s_images_list
 
 for imageName in ${k8s_images_list[@]} ; do
         echo ${imageName/#k8s\.gcr\.io\//}
+        if [[ "$(docker images -q ${imageName} 2> /dev/null)" == "" ]]; then
+            echo  -e "${magenta} ${imageName} ${none} already  exists ..." 
+            continue
+        fi
         sudo docker pull registry.cn-hangzhou.aliyuncs.com/google_containers/${imageName/#k8s\.gcr\.io\//}
         sudo docker tag registry.cn-hangzhou.aliyuncs.com/google_containers/${imageName/#k8s\.gcr\.io\//} $imageName
         sudo docker rmi registry.cn-hangzhou.aliyuncs.com/google_containers/${imageName/#k8s\.gcr\.io\//}
@@ -109,27 +91,32 @@ done
 # todo  choose k8s version
 init_k8s_master_node(){
 #master node 
-sudo kubeadm init --pod-network-cidr=10.244.0.0/16 # --kubernetes-version 1.16.0
+sudo kubeadm init --pod-network-cidr=10.244.0.0/16 ${@:-''} # --kubernetes-version 1.16.0
 
 
 # To start using your cluster, you need to run the follong as a regular user:
-mkdir -p $HOME/.kube
-sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-sudo chown $(id -u):$(id -g) $HOME/.kube/config
+if [ ! -d $HOME/.kube ] ;then
+    mkdir -p $HOME/.kube
+fi
+
+if [ ! -f $HOME/.kube/config ] ;then
+    sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+    sudo chown $(id -u):$(id -g) $HOME/.kube/config
+fi
 
 }
 
 
 #todo 
 apply_network(){
-# apply  flannel 
-kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+# apply network   default: flannel 
+kubectl apply -f ${@:-'https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml'}
 }
 
 
-check(){
-  return `expr $?==0`
-}
+# check(){
+#   return `expr $?==0`
+# }
 
 check_pods_ready(){
   kubectl get pods   -o $'jsonpath={range .items[*]}{.metadata.name}\t{.status.phase}\n{end}'  ${@:-'--all-namespaces'}
@@ -137,8 +124,16 @@ check_pods_ready(){
 
 
 # service is active ?   1 active 2 activing 3 inactive 
-check_service(){
+check_service(){ #Args
   systemctl is-active  $@
+}
+
+# do until cmd success
+repeat(){
+  while true
+  do
+    $@  && return
+  done
 }
 
 get_ca_hash(){
@@ -149,6 +144,7 @@ get_ca_hash(){
 get_join_token(){
   kubeadm token list |awk 'NR==2  {print $1}'
 }
+
 
 get_distribution() {
 	lsb_dist=""
@@ -161,63 +157,32 @@ get_distribution() {
 	echo "$lsb_dist"
 }
 
+install_k8s_ubuntu(){
+#  aliyun mirror k8s gpg  
+curl -fsSL https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | sudo apt-key add -  > /dev/null
+# add aliyun mirror k8s source
+sudo tee /etc/apt/sources.list.d/kubernetes.list <<-'EOF'
+deb https://mirrors.aliyun.com/kubernetes/apt kubernetes-xenial main
+EOF
+#update
+sudo apt update
+# install kubelet kubeadm kubectl
+sudo apt install -y -qq --no-install-recommends kubelet kubeadm kubectl
+}
+do_install_ubuntu(){
+#  dependence
+sudo apt install -y -qq --no-install-recommends\
+  apt-transport-https \
+  curl ca-certificates \
+  > /dev/null 2>&1
 
-# perform some very rudimentary platform detection
-#	lsb_dist=$( get_distribution )
-#	lsb_dist="$(echo "$lsb_dist" | tr '[:upper:]' '[:lower:]')"
-#
-#	case "$lsb_dist" in
-#
-#		ubuntu)
-#			if command_exists lsb_release; then
-#				dist_version="$(lsb_release --codename | cut -f2)"
-#			fi
-#			if [ -z "$dist_version" ] && [ -r /etc/lsb-release ]; then
-#				dist_version="$(. /etc/lsb-release && echo "$DISTRIB_CODENAME")"
-#			fi
-#		;;
-#
-#		debian)
-#			dist_version="$(sed 's/\/.*//' /etc/debian_version | sed 's/\..*//')"
-#			case "$dist_version" in
-#				10)
-#					dist_version="buster"
-#				;;
-#				9)
-#					dist_version="stretch"
-#				;;
-#				8)
-#					dist_version="jessie"
-#				;;
-#			esac
-#		;;
-#
-#		centos)
-#			if [ -z "$dist_version" ] && [ -r /etc/os-release ]; then
-#				dist_version="$(. /etc/os-release && echo "$VERSION_ID")"
-#			fi
-#		;;
-#
-#		*)
-#			if command_exists lsb_release; then
-#				dist_version="$(lsb_release --release | cut -f2)"
-#			fi
-#			if [ -z "$dist_version" ] && [ -r /etc/os-release ]; then
-#				dist_version="$(. /etc/os-release && echo "$VERSION_ID")"
-#			fi
-#		;;
-#
-#	esac
-
-
-
-do_install(){
-
-	if [[ $(check_docker) == 0 ]];then
+  	if [[ $(check_docker) == 0 ]];then
 		_cyan "install docker ... "
 		install_docker
 	else
 		_green " "docker" already exist on this system "
+    docker_version="$(docker -v | cut -d ' ' -f3 | cut -d ',' -f1)"
+		_cyan ${docker_version}
 	fi
 
   swap_off
@@ -230,22 +195,76 @@ do_install(){
   hash=`get_ca_hash`
   token=`get_join_token`
 
-  echo -e "${green}  $hash ${none}"
-  echo -e "${green}  $token ${none}"
+  echo -e "${green}ca-hash:\t$hash ${none}"
+  echo -e "${green}token:\t$token ${none}"
 }
 
 
+
+do_install(){
+  lsb_dist=$( get_distribution )
+	lsb_dist="$(echo "$lsb_dist" | tr '[:upper:]' '[:lower:]')"
+
+	case "$lsb_dist" in
+
+		ubuntu)
+			if command_exists lsb_release; then
+				dist_version="$(lsb_release --codename | cut -f2)"
+			fi
+			if [ -z "$dist_version" ] && [ -r /etc/lsb-release ]; then
+				dist_version="$(. /etc/lsb-release && echo "$DISTRIB_CODENAME")"
+			fi
+      uname_info=`uname -a`
+      echo -e  "OS:\t${cyan} $(. /etc/os-release && echo "${PRETTY_NAME}")  ${none}"
+      # todo params
+      do_install_ubuntu
+		;;
+
+		debian)
+			dist_version="$(sed 's/\/.*//' /etc/debian_version | sed 's/\..*//')"
+			case "$dist_version" in
+				10)
+					dist_version="buster"
+				;;
+				9)
+					dist_version="stretch"
+				;;
+				8)
+					dist_version="jessie"
+				;;
+			esac
+		;;
+
+		centos|fedora)
+			if [ -z "$dist_version" ] && [ -r /etc/os-release ]; then
+				dist_version="$(. /etc/os-release && echo "$VERSION_ID")"
+			fi
+		;;
+
+		*)
+			if command_exists lsb_release; then
+				dist_version="$(lsb_release --release | cut -f2)"
+			fi
+			if [ -z "$dist_version" ] && [ -r /etc/os-release ]; then
+				dist_version="$(. /etc/os-release && echo "$VERSION_ID")"
+			fi
+		;;
+
+	esac
+}
+
+
+
+
+
+
+
+### main ###
 # current user
 user="$(id -un 2>/dev/null || true)"
-_cyan "User ${user}"
+echo -e  "User:\t${cyan} ${user} ${none}"
 local_ip=`ip addr | grep 'state UP' -A2 | tail -n1 | awk '{print $2}' | awk -F"/" '{print $1}'`
-_cyan "Local IP6 is ${local_ip}"
-
-#  dependence
-sudo apt install -y \
-  apt-transport-https \
-  curl ca-certificates \
-  > /dev/null 2>&1
-
+echo -e  "IP:\t${cyan} ${local_ip} ${none}"
 do_install
-#kubectl get pods   -o $'jsonpath={range .items[*]}{.metadata.name}\t{.status.phase}\n{end}'  --all-namespaces
+
+
