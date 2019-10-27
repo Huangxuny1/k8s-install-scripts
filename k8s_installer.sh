@@ -29,6 +29,9 @@ usage() {
 
 # install docker u
 install_docker(){
+
+if [[ $(check_docker) == 0 ]];then
+	_cyan "install docker ... "
   # add gpg key
   #curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
   # install docker use aliyun mirror 
@@ -37,6 +40,13 @@ install_docker(){
   sudo usermod -aG docker ${user}
   # refresh 
   #newgrp docker  
+	else
+		_green " "docker" already exist on this system "
+    docker_version="$(docker -v | cut -d ' ' -f3 | cut -d ',' -f1)"
+		_cyan ${docker_version}
+	fi
+
+ 
 }
 
 # Check whether docker is installed successfully
@@ -54,7 +64,9 @@ check_docker(){
 
 swap_off(){
 # swapoff permanently (reboot to take effect)
-sudo sed -ri 's/.*swap.*/#&/' /etc/fstab
+if [ `grep -c "^#.*swap.*" /etc/fstab` -eq '0' ]; then
+  sudo sed -ri 's/.*swap.*/#&/' /etc/fstab
+fi
 # get swap status
 swap_stat=`swapon -s`
 # swapoff immediately
@@ -73,17 +85,18 @@ get_k8s_required_images(){
 # get images 
 k8s_images_list=`kubeadm config images list 2>/dev/null`
 
-echo $k8s_images_list
+echo -e  " ${magenta}$k8s_images_list ${none}"
 
 for imageName in ${k8s_images_list[@]} ; do
         echo ${imageName/#k8s\.gcr\.io\//}
-        if [[ "$(docker images -q ${imageName} 2> /dev/null)" == "" ]]; then
-            echo  -e "${magenta} ${imageName} ${none} already  exists ..." 
-            continue
-        fi
-        sudo docker pull registry.cn-hangzhou.aliyuncs.com/google_containers/${imageName/#k8s\.gcr\.io\//}
-        sudo docker tag registry.cn-hangzhou.aliyuncs.com/google_containers/${imageName/#k8s\.gcr\.io\//} $imageName
-        sudo docker rmi registry.cn-hangzhou.aliyuncs.com/google_containers/${imageName/#k8s\.gcr\.io\//}
+        if [[ -z "$(sudo docker images -q ${imageName} 2>/dev/null)" ]]; then
+          echo  -e "${magenta} pulling image:\t${imageName} ${none} " 
+          sudo docker pull registry.cn-hangzhou.aliyuncs.com/google_containers/${imageName/#k8s\.gcr\.io\//}
+          sudo docker tag registry.cn-hangzhou.aliyuncs.com/google_containers/${imageName/#k8s\.gcr\.io\//} $imageName > /dev/null
+          sudo docker rmi registry.cn-hangzhou.aliyuncs.com/google_containers/${imageName/#k8s\.gcr\.io\//}  > /dev/null
+        else
+          echo  -e "${magenta} ${imageName} ${none} already  exists ..." 
+        fi       
 done
 
 }
@@ -91,7 +104,7 @@ done
 # todo  choose k8s version
 init_k8s_master_node(){
 #master node 
-sudo kubeadm init --pod-network-cidr=10.244.0.0/16 ${@:-''} # --kubernetes-version 1.16.0
+sudo kubeadm init --pod-network-cidr=10.244.0.0/16 ${@:-} # --kubernetes-version 1.16.0
 
 
 # To start using your cluster, you need to run the follong as a regular user:
@@ -170,24 +183,10 @@ sudo apt update
 sudo apt install -y -qq --no-install-recommends kubelet kubeadm kubectl
 }
 do_install_ubuntu(){
-#  dependence
-sudo apt install -y -qq --no-install-recommends\
-  apt-transport-https \
-  curl ca-certificates \
-  > /dev/null 2>&1
-
-  	if [[ $(check_docker) == 0 ]];then
-		_cyan "install docker ... "
-		install_docker
-	else
-		_green " "docker" already exist on this system "
-    docker_version="$(docker -v | cut -d ' ' -f3 | cut -d ',' -f1)"
-		_cyan ${docker_version}
-	fi
-
+	install_docker
   swap_off
   #todo  check    
-  install_k8s
+  install_k8s_ubuntu
   get_k8s_required_images
   init_k8s_master_node   # todo Get the join command for the slave node
   apply_network
@@ -199,6 +198,54 @@ sudo apt install -y -qq --no-install-recommends\
   echo -e "${green}token:\t$token ${none}"
 }
 
+do_install_centos(){
+  install_docker
+  sudo systemctl enable --now docker
+  swap_off
+  sudo tee /etc/yum.repos.d/kubernetes.repo <<-'EOF'
+[kubernetes]
+name=Kubernetes
+baseurl=http://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=0
+repo_gpgcheck=0
+gpgkey=http://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg
+       http://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
+EOF
+
+# 关闭SElinux
+sudo setenforce 0
+sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+
+# 安装kubelet kubeadm kubectl
+sudo yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+
+sudo systemctl enable --now kubelet  # 开机启动kubelet
+
+# centos7用户还需要设置路由：
+sudo yum install -y bridge-utils.x86_64
+modprobe  br_netfilter  # 加载br_netfilter模块，使用lsmod查看开启的模块
+sudo tee /etc/sysctl.d/k8s.conf <<-'EOF'
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+#sysctl --system  # 重新加载所有配置文件
+
+sudo systemctl disable --now firewalld  # 关闭防火墙
+
+get_k8s_required_images
+  init_k8s_master_node   # todo Get the join command for the slave node
+  apply_network
+ 
+  hash=`get_ca_hash`
+  token=`get_join_token`
+
+  echo -e "${green}ca-hash:\t$hash ${none}"
+  echo -e "${green}token:\t$token ${none}"
+
+
+}
+
 
 
 do_install(){
@@ -208,14 +255,20 @@ do_install(){
 	case "$lsb_dist" in
 
 		ubuntu)
+    
 			if command_exists lsb_release; then
 				dist_version="$(lsb_release --codename | cut -f2)"
 			fi
 			if [ -z "$dist_version" ] && [ -r /etc/lsb-release ]; then
-				dist_version="$(. /etc/lsb-release && echo "$DISTRIB_CODENAME")"
+				os_version="$(. /etc/lsb-release && echo "$DISTRIB_CODENAME")"
+        echo -e  "OS:\t${cyan} ${os_version}  ${none}"
 			fi
-      uname_info=`uname -a`
-      echo -e  "OS:\t${cyan} $(. /etc/os-release && echo "${PRETTY_NAME}")  ${none}"
+      #  dependence
+      sudo apt install -y -qq --no-install-recommends\
+      apt-transport-https \
+      curl ca-certificates \
+      > /dev/null 2>&1
+      
       # todo params
       do_install_ubuntu
 		;;
@@ -237,8 +290,12 @@ do_install(){
 
 		centos|fedora)
 			if [ -z "$dist_version" ] && [ -r /etc/os-release ]; then
-				dist_version="$(. /etc/os-release && echo "$VERSION_ID")"
+				os_version="$(. /etc/os-release && echo "$PRETTY_NAME")"
+        echo -e  "OS:\t${cyan} ${os_version}  ${none}"
 			fi
+
+      do_install_centos
+
 		;;
 
 		*)
@@ -246,8 +303,10 @@ do_install(){
 				dist_version="$(lsb_release --release | cut -f2)"
 			fi
 			if [ -z "$dist_version" ] && [ -r /etc/os-release ]; then
-				dist_version="$(. /etc/os-release && echo "$VERSION_ID")"
+				os_version="$(. /etc/os-release && echo "$PRETTY_NAME")"
+        echo -e  "OS:\t${cyan} ${os_version}  ${none}"
 			fi
+      
 		;;
 
 	esac
