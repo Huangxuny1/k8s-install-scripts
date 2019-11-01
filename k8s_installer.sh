@@ -183,19 +183,20 @@ sudo apt update
 sudo apt install -y -qq --no-install-recommends kubelet kubeadm kubectl
 }
 do_install_ubuntu(){
-	install_docker
+  install_docker
   swap_off
   #todo  check    
   install_k8s_ubuntu
   get_k8s_required_images
-  init_k8s_master_node   # todo Get the join command for the slave node
-  apply_network
+  #init_k8s_master_node   # todo Get the join command for the slave node
+  #apply_network
  
   hash=`get_ca_hash`
   token=`get_join_token`
 
   echo -e "${green}ca-hash:\t$hash ${none}"
   echo -e "${green}token:\t$token ${none}"
+  ssh athos@172.16.80.130 'bash -s' < k8s_join_master.sh $local_ip $token $hash
 }
 
 do_install_centos(){
