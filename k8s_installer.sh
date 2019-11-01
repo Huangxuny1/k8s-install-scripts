@@ -123,7 +123,7 @@ fi
 #todo 
 apply_network(){
 # apply network   default: flannel 
-kubectl apply -f ${@:-'https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml'}
+repeat kubectl apply -f ${@:-'https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml'}
 }
 
 

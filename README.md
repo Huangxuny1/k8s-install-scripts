@@ -34,4 +34,5 @@ $ ./k8s_installer.sh
  function __is_pod_ready() {
   [[ "$(kubectl get po "$1" -o 'jsonpath={.status.conditions[?(@.type=="Ready")].status}')" == 'True' ]]
 }
+kubeadm token create --print-join-command
 ```
