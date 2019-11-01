@@ -112,6 +112,7 @@ do_join_master(){
     install_docker
     install_k8s_ubuntu
     get_k8s_required_images
+    swap_off
     # join 
     sudo kubeadm join ${master_ip}:6443 --token ${token} \
     --discovery-token-ca-cert-hash sha256:${ca_hash}
