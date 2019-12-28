@@ -34,5 +34,7 @@ $ ./k8s_installer.sh
  function __is_pod_ready() {
   [[ "$(kubectl get po "$1" -o 'jsonpath={.status.conditions[?(@.type=="Ready")].status}')" == 'True' ]]
 }
-kubeadm token create --print-join-command
+kubeadm token create --print-join-command  # 创建新的token并打印node加入命令
+
+quay-mirror.qiniu.com/coreos/   # flannel 镜像
 ```
