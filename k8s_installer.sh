@@ -80,8 +80,9 @@ swap_off(){
 
 
 get_k8s_required_images(){
-  # get images from kubeadm config
-  k8s_images_list=`kubeadm config images list 2>/dev/null`
+  # get images from kubeadm config 
+  # v1.17.0
+  k8s_images_list=`kubeadm config images list --kubernetes-version ${@:-'stable-1'} 2>/dev/null` # ${@:-${VERSION}}
 
   echo -e  "${magenta}$k8s_images_list ${none}"
 
