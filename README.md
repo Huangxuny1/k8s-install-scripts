@@ -37,4 +37,9 @@ $ ./k8s_installer.sh
 kubeadm token create --print-join-command  # 创建新的token并打印node加入命令
 
 quay-mirror.qiniu.com/coreos/   # flannel 镜像
+
+$ source <(kubectl completion bash) # setup autocomplete in bash, bash-completion package should be installed first.
+$ source <(kubectl completion zsh)  # setup autocomplete in zsh
+
+journalctl -f -u kubelet # log
 ```

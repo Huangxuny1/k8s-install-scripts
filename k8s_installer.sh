@@ -177,7 +177,7 @@ EOF
   #update
   sudo apt update
   # install kubelet kubeadm kubectl
-  sudo apt install -y -qq --no-install-recommends kubelet kubeadm kubectl
+  sudo apt install -y -qq --no-install-recommends kubelet kubeadm kubectl > /dev/null 
 }
 
 do_install_ubuntu(){
@@ -255,10 +255,10 @@ do_install(){
         echo -e  "OS:\t${cyan} ${os_version}  ${none}"
 			fi
       #  dependence
-      sudo apt install -y -qq --no-install-recommends\
+      sudo apt install -y -qq --no-install-recommends \
       apt-transport-https \
       curl ca-certificates \
-      > /dev/null 2>&1
+      > /dev/null #2>&1
       
       # todo params
       do_install_ubuntu
@@ -322,7 +322,7 @@ user="$(id -un 2>/dev/null || true)"
 echo -e  "User:\t${cyan} ${user} ${none}"
 local_ip=`ip addr | grep 'state UP' -A2 | tail -n1 | awk '{print $2}' | awk -F"/" '{print $1}'`
 echo -e  "IP:\t${cyan} ${local_ip} ${none}"
-check_sys
+#check_sys
 do_install
 print_join_info
 

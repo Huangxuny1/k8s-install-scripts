@@ -107,7 +107,7 @@ sudo apt install -y -qq --no-install-recommends kubelet kubeadm kubectl
 do_join_master(){
     echo $master_ip
     echo $token
-    echo $hash
+    echo $ca_hash
 
     install_docker
     install_k8s_ubuntu
@@ -132,7 +132,7 @@ do_join_master(){
     --discovery-token-ca-cert-hash sha256:${ca_hash}
 }
 
-
+user="$(id -un 2>/dev/null || true)"
 master_ip=$1
 token=$2
 ca_hash=$3
