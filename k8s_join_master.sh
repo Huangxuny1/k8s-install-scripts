@@ -115,14 +115,17 @@ do_join_master(){
     swap_off
 
     if [ -z ${master_ip} ]; then
-       read -p "${cyan}master ip : ${none}\n" master_ip
+      echo -e  "${cyan}master ip : ${none}\n"
+      read master_ip
     fi
 
     if [ -z ${token} ]; then
-       read -p "${cyan}token : ${none}\n" token
+      echo -e "${cyan}token : ${none}\n"
+      read token
     fi
     if [ -z ${ca_hash} ]; then
-       read -p "${cyan}ca_hash : ${none}\n" ca_hash
+      echo -e "${cyan}ca_hash : ${none}\n"
+      read ca_hash
     fi
     # join 
     sudo kubeadm join ${master_ip}:6443 --token ${token} \

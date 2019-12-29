@@ -16,50 +16,49 @@ _yellow() { echo -e ${yellow}$*${none}; }
 _magenta() { echo -e ${magenta}$*${none}; }
 _cyan() { echo -e ${cyan}$*${none}; }
 
-
-
+# todo
 usage() {
-  #todo
   echo -e "Usage: k8s_installer.sh #TODO "
 }
 
-
+# archive
 # install docker
 install_docker(){
-
-if [[ $(check_docker) == 0 ]];then
-	_cyan "install docker ... "
-  # add gpg key
-  #curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-  # install docker use aliyun mirror 
-  curl -fsSL https://get.docker.com | bash -s docker --mirror Aliyun 
-  # add user to docker group 
-  sudo usermod -aG docker ${user}
-  # refresh 
-  #newgrp docker  
+  if [[ $(check_docker) == 0 ]];then
+	  _cyan "install docker ... "
+    # add gpg key
+    #curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+    # install docker use aliyun mirror 
+    curl -fsSL https://get.docker.com | bash -s docker --mirror Aliyun 
+    # add user to docker group 
+    sudo usermod -aG docker ${user}
+    # refresh 
+    #newgrp docker  
 	else
-		_green " "docker" already exist on this system "
-    docker_version="$(docker -v | cut -d ' ' -f3 | cut -d ',' -f1)"
-		_cyan ${docker_version}
+	  _green " "docker" already exist on this system "
+     docker_version="$(docker -v | cut -d ' ' -f3 | cut -d ',' -f1)"
+	  _cyan ${docker_version}
 	fi
-
- 
 }
 
-
+# archive 
 command_exists() {
 	command -v "$@" > /dev/null 2>&1
 }
 
-## check docker whether installed   1 installed  0 no 
+# archive 
+## check docker whether installed  1 installed  0 no 
 check_docker(){
   # Check whether docker is installed successfully
   if command_exists docker && [ -e /var/run/docker.sock ]; then
     echo 1
-  fi 
+  else
     echo 0
+  fi
 }
 
+# archive
+# 判断是否关闭swap 如果为关闭则关闭
 swap_off(){
   # swapoff permanently (reboot to take effect)
   if [ `grep -c "^#.*swap.*" /etc/fstab` -eq '0' ]; then
@@ -77,34 +76,31 @@ swap_off(){
   fi
 }
 
-
-
+# archive
+# @param 版本  例如: get_k8s_required_images 1.17.0 默认即为最新版
 get_k8s_required_images(){
-  # get images from kubeadm config 
-  # v1.17.0
-  k8s_images_list=`kubeadm config images list --kubernetes-version ${@:-'stable-1'} 2>/dev/null` # ${@:-${VERSION}}
-
-  echo -e  "${magenta}$k8s_images_list ${none}"
-
+  # 获取对应版本所需的 镜像
+  # 版本格式 v1.17.0或者1.17.0  默认为 stable-1  {参考  https://kubernetes.io/docs/reference/setup-tools/kubeadm/kubeadm-config/#cmd-config-images-list}
+  local k8s_images_list=`kubeadm config images list --kubernetes-version ${@:-'stable-1'} 2>/dev/null` # ${@:-${VERSION}}
+  echo -e "${magenta}$k8s_images_list ${none}"
   for imageName in ${k8s_images_list[@]} ; do
-    echo ${imageName/#k8s\.gcr\.io\//}
+    echo ${imageName}
     if [[ -z "$(sudo docker images -q ${imageName} 2>/dev/null)" ]]; then
-      echo  -e "${magenta} pulling image:\t${imageName} ${none} " 
+      echo  -e "${magenta} pulling image:\t${imageName} ${none} "
       sudo docker pull registry.cn-hangzhou.aliyuncs.com/google_containers/${imageName/#k8s\.gcr\.io\//}
       sudo docker tag registry.cn-hangzhou.aliyuncs.com/google_containers/${imageName/#k8s\.gcr\.io\//} $imageName > /dev/null
       sudo docker rmi registry.cn-hangzhou.aliyuncs.com/google_containers/${imageName/#k8s\.gcr\.io\//}  > /dev/null
     else
       echo  -e "${magenta} ${imageName} ${none} already  exists ..." 
     fi       
-done
-
+  done
 }
 
-# todo choose k8s version
+# archive
+# @param k8s版本 init_k8s_master_node 
 init_k8s_master_node(){
   #master node 
-  sudo kubeadm init --pod-network-cidr=10.244.0.0/16 ${@:-} # --kubernetes-version 1.16.0
-
+  sudo kubeadm init --pod-network-cidr=10.244.0.0/16 --kubernetes-version ${@:-'stable-1'} #1.16.0 # ${@:-${VERSION}}
 
   # To start using your cluster, you need to run the follong as a regular user:
   if [ ! -d $HOME/.kube ] ;then
@@ -117,10 +113,11 @@ init_k8s_master_node(){
   fi
 }
 
-
-#todo 
+# archive
+# apply network   default: flannel 
+# @param url  
 apply_network(){
-  # apply network   default: flannel 
+  # 重复执行直至成功 
   repeat kubectl apply -f ${@:-'https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml'}
 }
 
@@ -147,16 +144,17 @@ repeat(){
   done
 }
 
+# archive 
 get_ca_hash(){
   openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex | sed 's/^.* //'
 }
 
-# only get default token 
+# only get default token
 get_join_token(){
   kubeadm token list |awk 'NR==2  {print $1}'
 }
 
-
+# archive
 get_distribution() {
 	lsb_dist=""
 	# Every system that we officially support has /etc/os-release
@@ -168,6 +166,7 @@ get_distribution() {
 	echo "$lsb_dist"
 }
 
+# archive
 install_k8s_ubuntu(){
   #  aliyun mirror k8s gpg  
   curl -fsSL https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | sudo apt-key add -  > /dev/null
@@ -305,7 +304,14 @@ do_install(){
 }
 
 
+check_sys(){
+  #检查是否为Root
+  [ $(id -u) != "0" ] && { echo -e ${red} "Error: You must be root to run this script${none}"; exit 1; }
+  #检查CPU核数
+  [[ `cat /proc/cpuinfo | grep "processor" | wc -l` == 1 ]] && { echo -e ${red} "master node cpu number should be >= 2! ${none}"; exit 1;}
 
+
+}
 
 
 
@@ -316,6 +322,7 @@ user="$(id -un 2>/dev/null || true)"
 echo -e  "User:\t${cyan} ${user} ${none}"
 local_ip=`ip addr | grep 'state UP' -A2 | tail -n1 | awk '{print $2}' | awk -F"/" '{print $1}'`
 echo -e  "IP:\t${cyan} ${local_ip} ${none}"
+check_sys
 do_install
 print_join_info
 

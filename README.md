@@ -22,8 +22,8 @@ $ ./k8s_installer.sh
 - [ ] 更多的check
 - [ ] 根据配置 ssh 从节点自动加入(token ca-hash)
 - [ ] service状态判断(function check_service )
-- [ ] pods status  ( function check_pods_ready )
-- [ ] 更多网络方案  (Calico 等等)
+- [ ] pods status  (function check_pods_ready )
+- [ ] ~~更多网络方案  (Calico 等等)~~
 - [ ] 使用说明 (usage)
 
 <h2> 欢迎提 issue 和 PR 一起完善 </h2>
